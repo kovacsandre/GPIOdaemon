@@ -4,13 +4,12 @@
 
 After the GPIO sysfs was deprecated the centralized way to configure and
 manipulate GPIOs was no longer the part of the system. The GPIOdaemon tries to
-be a solution for this problem with the *libgpiod* library.
+be a solution for this problem using the *libgpiod* library.
 
 ## Operation
 
 First, the daemon reads the config file at startup and tries to config the GPIO
-lines. After it is done, the daemon will waits for the socket connections. For example
-the line below is set the PD21 pin to high on the gpiochip1:
+lines. After it is done, the daemon will wait for the socket connections. For example the line below represents how to set the PD21 pin to high on the gpiochip1:
 
     echo "gpiochip1:PD21 set=1" | socat - UNIX-CONNECT:/var/run/gpiodaemon.sock
 
@@ -37,7 +36,7 @@ This daemon is still in an active development.
 
 ## TODOs (without priorities)
 
-* Input/output query. Be able to get the state of the pins
+* Input/output query. To be able to get the state of the pins
 * Add "group" keyword to the config. This can be useful when some programs are
 using GPIOs. With an initial message the client may select from the group of
 interest eg. interrupts
