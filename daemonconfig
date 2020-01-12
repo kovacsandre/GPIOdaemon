@@ -1,0 +1,6 @@
+gpiochip1:PD21	direction=out,consumer=led_green,defval=0;
+gpiochip1:PC09	direction=out,consumer=led_red,defval=1;
+gpiochip1:227	direction=in,consumer=button,edge=falling;
+# gpiochip1:PH05	direction=in,consumer=red_in,edge=rising;
+gpiochip1:PH04	direction=in,consumer=green_in,edge=both;
+gpiochip1:PD22	direction=in,consumer=switch;
