@@ -205,6 +205,13 @@ static int find_pin(char **lineptr, char **arri, unsigned int *line_num)
 	(*lineptr)++;
 	strncpy(pin, *arri, sizeof(pin)-1);
 
+	if (!strcmp(pin, "all"))
+		return 3;
+	else if (!strcmp(pin, "all_output"))
+		return 2;
+	else if (!strcmp(pin, "all_input"))
+		return 1;
+
 	if (sscanf(pin, "%d", line_num) != 1) {
 		for (int i = 'A'; i < 'Z'; i++) {
 			if (pin[1] == i) {
@@ -318,50 +325,134 @@ static int parser(const char *config_file,
 	return 0;
 }
 
-static int processing_client_req(char *message, struct gpiod_line_bulk *entries)
+static int send_sock_msg(int fd, const char *msg, size_t len, int flags)
+{
+	ssize_t rv = send(fd, msg, len, flags);
+
+	if (rv < 0) {
+		fprintf(stderr, "send(): %s\n", strerror(errno));
+	}
+	else if (rv != len) {
+		fprintf(stderr, "send(): rv != len\n");
+	}
+
+	return rv;
+}
+
+static int processing_client_req(char *message, struct gpiod_line_bulk *entries,
+								 int sd)
 {
 	char chipname[32];
 	char *ptr, *start;
 	const char *lines_chipname;
-	int value = 0, rv = -1;
+	int value = -1, rv = -1, pinrv;
 	unsigned int line_num, offset;
 
 	struct gpiod_chip *chip;
 
 	start = ptr = message;
 
-	if (find_chip_name(&ptr, &start, message, chipname, sizeof(chipname)))
-		return -1;
-	printf("chip: %s\n", chipname);
+	if (find_chip_name(&ptr, &start, message, chipname, sizeof(chipname)) < 0) {
+		char msg[] = "Wrong chip!\n";
+		send_sock_msg(sd, msg, sizeof(msg), 0);
 
-	if (find_pin(&ptr, &start, &line_num))
 		return -1;
-	printf("line: %d\n", line_num);
+	}
+	//printf("chip: %s\n", chipname);
 
-	if (!strcmp(ptr, "set=1\n"))
+	if ((pinrv = find_pin(&ptr, &start, &line_num)) < 0) {
+		char msg[] = "Wrong pin!\n";
+		send_sock_msg(sd, msg, sizeof(msg), 0);
+
+		return -1;
+	}
+	//printf("line: %d\n", line_num);
+
+	if (!strcmp(ptr, "set\n"))
 		value = 1;
-	else if (!strcmp(ptr, "set=0\n"))
+	else if (!strcmp(ptr, "reset\n"))
 		value = 0;
+	else if (!strcmp(ptr, "get\n")) {}
 	else {
-		fprintf(stderr, "Wrong property\n");
+		char msg[] = "Wrong keyword!\n";
+		send_sock_msg(sd, msg, sizeof(msg), 0);
+
 		return -1;
 	}
 
-	for (size_t i = 0; i <= entries->num_lines; i++) {
-		offset = gpiod_line_offset(entries->lines[i]);
-		if (offset != line_num)
-			continue;
+	/* If a single line requested */
+	if (pinrv == 0) {
+		for (size_t i = 0; i < entries->num_lines; i++) {
+			char msg[12] = {0};
 
-		chip = gpiod_line_get_chip(entries->lines[i]);
-		lines_chipname = gpiod_chip_name(chip);
+			offset = gpiod_line_offset(entries->lines[i]);
+			if (offset != line_num)
+				continue;
 
-		if (!strcmp(lines_chipname, chipname)) {
-			rv = gpiod_line_set_value(entries->lines[i], value);
+			chip = gpiod_line_get_chip(entries->lines[i]);
+			lines_chipname = gpiod_chip_name(chip);
+
+			if (strcmp(lines_chipname, chipname))
+				continue;
+
+			if (value != -1) {
+				rv = gpiod_line_set_value(entries->lines[i], value);
+
+				if (rv < 0)
+					strcpy(msg, "NOK\n");
+				else
+					strcpy(msg, "OK\n");
+			}
+			else {
+				rv = gpiod_line_get_value(entries->lines[i]);
+				if (rv == 0)
+					strcpy(msg, "0\n");
+				else
+					strcpy(msg, "1\n");
+			}
+			send_sock_msg(sd, msg, sizeof(msg), 0);
 			break;
 		}
 	}
+	/* all (3), all_input (1), all_output (2) */
+	else {
+		for (size_t i = 0; i < entries->num_lines; i++) {
+			char msg[32] = {0};
 
-	return rv;
+			int dir = gpiod_line_direction(entries->lines[i]);
+			if (pinrv != 3) {
+				if (pinrv != dir)
+					continue;
+			}
+
+			if (pinrv == GPIOD_LINE_DIRECTION_OUTPUT) {
+				if (value == -1) {
+					rv = gpiod_line_get_value(entries->lines[i]);
+					if (rv == 0)
+						strcpy(msg, "0\n");
+					else
+						strcpy(msg, "1\n");
+				}
+				else {
+					rv = gpiod_line_set_value(entries->lines[i], value);
+					if (rv < 0)
+						strcpy(msg, "NOK\n");
+					else
+						strcpy(msg, "OK\n");
+				}
+			}
+			else {
+				rv = gpiod_line_get_value(entries->lines[i]);
+				if (rv == 0)
+					strcpy(msg, "0\n");
+				else
+					strcpy(msg, "1\n");
+			}
+			send_sock_msg(sd, msg, sizeof(msg), 0);
+		}
+	}
+
+	return 0;
 }
 
 int main(int argc, const char *argv[])
@@ -475,28 +566,26 @@ int main(int argc, const char *argv[])
 				sd = gpioevent_fds[i];
 				if (FD_ISSET(sd, &rdfs)) {
 					char buffer[128] = {0};
-					/*printf("Interrupt on line: %u (%s) value: %d\n",
-							gpiod_line_offset(entries.lines[gpioevent_line_num[i]]),
-							gpiod_line_consumer(entries.lines[gpioevent_line_num[i]]),
-							gpiod_line_get_value(entries.lines[gpioevent_line_num[i]]));*/
+					const char *lines_chipname;
+					struct gpiod_chip *chip;
+
 					gpiod_line_event_read_fd(sd, &eventfd);
+					chip = gpiod_line_get_chip(entries.lines[gpioevent_line_num[i]]);
+					lines_chipname = gpiod_chip_name(chip);
 
 					snprintf(buffer, sizeof(buffer)-1, "[%ld.%.9ld] %s:%u(%s):%s\n",
 							eventfd.ts.tv_sec, eventfd.ts.tv_nsec,
-							gpiod_line_chip_name(entries.lines[gpioevent_line_num[i]]),
+							lines_chipname,
 						 	gpiod_line_offset(entries.lines[gpioevent_line_num[i]]),
 							gpiod_line_consumer(entries.lines[gpioevent_line_num[i]]),
-							eventfd.event_type == GPIOD_LINE_EVENT_RISING_EDGE ? "rising" : "falling");
+							eventfd.event_type == GPIOD_LINE_EVENT_RISING_EDGE ?
+												  "rising" : "falling");
 					printf("%s\n", buffer);
 
 					for (size_t i = 0; i < MAX_FDS; i++) {
 						sd = client_sockets[i];
-						if (sd) {
-							int rv = send(sd, buffer, sizeof(buffer), 0);
-							if (rv < 0) {
-								fprintf(stderr, "send(): %s\n", strerror(errno));
-							}
-						}
+						if (sd)
+							send_sock_msg(sd, buffer, sizeof(buffer), 0);
 					}
 
 					break;
@@ -515,22 +604,7 @@ int main(int argc, const char *argv[])
 					}
 					else {
 						printf("%s", buffer);
-						int rv = processing_client_req(buffer, &entries);
-
-						if (rv < 0) {
-							char reply[] = "NOK\n";
-							int rv = send(sd, reply, sizeof(reply), 0);
-							if (rv < 0) {
-								fprintf(stderr, "send(): %s\n", strerror(errno));
-							}
-						}
-						else {
-							char reply[] = "OK\n";
-							int rv = send(sd, reply, sizeof(reply), 0);
-							if (rv < 0) {
-								fprintf(stderr, "send(): %s\n", strerror(errno));
-							}
-						}
+						processing_client_req(buffer, &entries, sd);
 					}
 					break;
 				}
