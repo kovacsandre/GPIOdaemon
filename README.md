@@ -36,9 +36,9 @@ This daemon is still in an active development.
 
 ## TODOs (without priorities)
 
-* Input/output query. To be able to get the state of the pins
+* ~~~Input/output query. To be able to get the state of the pins~~~
 * Add "group" keyword to the config. This can be useful when some programs are
 using GPIOs. With an initial message the client may select from the group of
 interest eg. interrupts
-* Add getopts() for flexibility
+* ~~~Add getopts() for flexibility~~~
 * Update for the newer *libgpiod*

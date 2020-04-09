@@ -9,11 +9,14 @@
 #include <unistd.h>
 #include <errno.h>
 #include <signal.h>
+#include <getopt.h>
+#include <limits.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#define SOCK_PATH "/var/run/gpiodaemon.sock"
+#define DEFAULT_SOCKET "/var/run/gpiodaemon.sock"
+#define DEFAULT_CONFIG "/usr/local/etc/gpiodaemon"
 #define MAX_FDS 100
 #define MAX_LINES GPIOD_LINE_BULK_MAX_LINES
 #define MAX_CHIP 8
@@ -26,6 +29,26 @@ struct gpio_chip {
 	struct gpiod_chip *gpiochip[MAX_CHIP];
 	int chip_num;
 };
+
+static const char *const shortopts = "+hdc:s:";
+static const struct option longopts[] = {
+	{ "help",			no_argument,		NULL,	'h' },
+	{ "debug",			no_argument,		NULL,	'd' },
+	{ "config",			required_argument,	NULL,	'c' },
+	{ "socket",			required_argument,	NULL,	's' },
+	{ 0, 				0, 					0, 		0 	}
+};
+
+void print_help(const char *name)
+{
+	printf("Usage: %s [OPTIONS]\n", name);
+	printf("\n");
+	printf("Options:\n");
+	printf("  -h, --help\t\tdisplay this message and exit\n");
+	printf("  -d, --debug\t\tprint debug messages\n");
+	printf("  -c, --config\t\tconfiguraton file path [/usr/local/etc/gpiodaemon]\n");
+	printf("  -s, --socket\t\tsocket path [/var/run/gpiodaemon.sock]\n");
+}
 
 void exit_program(int s)
 {
@@ -122,7 +145,6 @@ static int set_gpio_line(const char *chip_name, int line_num, int defval,
 		if (!strcmp(gpiod_chip_name(chips->gpiochip[i]), chip_name)) {
 			gpio_chip = chips->gpiochip[i];
 			found = 1;
-			printf("yup, there is a chip named: \"%s\"\n", gpiod_chip_name(gpio_chip));
 			break;
 		}
 	}
@@ -251,14 +273,11 @@ static int parser(const char *config_file,
 		return -1;
 	}
 
-	//bzero(property, sizeof(property));
-	//bzero(consumer_str, sizeof(consumer_str));
-
 	config.consumer = consumer_str;
 
 	while (fgets(line, sizeof(line), fp) != NULL) {
 		lineptr = line;
-		printf("%s\n", lineptr);
+		printf("\n%s", lineptr);
 
 		if (*lineptr == '#')
 			continue;
@@ -358,7 +377,6 @@ static int processing_client_req(char *message, struct gpiod_line_bulk *entries,
 
 		return -1;
 	}
-	//printf("chip: %s\n", chipname);
 
 	if ((pinrv = find_pin(&ptr, &start, &line_num)) < 0) {
 		char msg[] = "Wrong pin!\n";
@@ -366,7 +384,6 @@ static int processing_client_req(char *message, struct gpiod_line_bulk *entries,
 
 		return -1;
 	}
-	//printf("line: %d\n", line_num);
 
 	if (!strcmp(ptr, "set\n"))
 		value = 1;
@@ -455,11 +472,13 @@ static int processing_client_req(char *message, struct gpiod_line_bulk *entries,
 	return 0;
 }
 
-int main(int argc, const char *argv[])
+int main(int argc, char **argv)
 {
+	char *config_path = NULL, *socket_path = NULL;
 	int client_sockets[MAX_FDS] = {0}, gpioevent_fds[MAX_LINES] = {0},
 		gpioevent_line_num[MAX_LINES] = {0},
-	 	master_socket, new_socket, sd, max_sd, srv, len;
+	 	master_socket, new_socket, sd, max_sd, srv, len,
+		optc, opti;
 	socklen_t t;
 	fd_set rdfs;
 	struct sockaddr_un local, remote;
@@ -470,10 +489,43 @@ int main(int argc, const char *argv[])
 
 	struct sigaction sa_exit;
 
+	for (;;) {
+		optc = getopt_long(argc, argv, shortopts, longopts, &opti);
+		if (optc < 0)
+			break;
+
+		switch (optc) {
+		case 'h':
+			print_help(argv[0]);
+		case 'd':
+			break;
+		case 's':
+			socket_path = strndup(optarg, PATH_MAX - 1);
+			break;
+		case 'c':
+			config_path = strndup(optarg, PATH_MAX - 1);
+			break;
+		case '?':
+		default:
+			print_help(argv[0]);
+		}
+	}
+
 	argc -= optind;
-	if (argc != 1) {
-		fprintf(stderr, "Usage: %s <config path>\n", argv[0]);
-		exit(EXIT_FAILURE);
+	argv += optind;
+
+	if (config_path == NULL)
+		config_path = strdup(DEFAULT_CONFIG);
+
+	if (socket_path == NULL)
+		socket_path = strdup(DEFAULT_SOCKET);
+
+	printf("Config path: %s\n", config_path);
+	printf("Socket path: %s\n", socket_path);
+
+	if (argc > 0) {
+		fprintf(stderr, "Unrecognized option!\n");
+		goto out;
 	}
 
 	sa_exit.sa_handler = exit_program;
@@ -486,7 +538,7 @@ int main(int argc, const char *argv[])
 
 	exit_flag = 0;
 
-	if (parser(argv[1], &chips, &entries, gpioevent_fds, gpioevent_line_num) < 0)
+	if (parser(config_path, &chips, &entries, gpioevent_fds, gpioevent_line_num) < 0)
 		goto out;
 
 	/* Init socket */
@@ -496,7 +548,7 @@ int main(int argc, const char *argv[])
 	}
 
 	local.sun_family = AF_UNIX;
-	strcpy(local.sun_path, SOCK_PATH);
+	strcpy(local.sun_path, socket_path);
 	unlink(local.sun_path);
 	len = strlen(local.sun_path) + sizeof(local.sun_family);
 	if (bind(master_socket, (struct sockaddr *)&local, len) == -1) {
@@ -624,6 +676,8 @@ out:
 	}
 
 	unlink(local.sun_path);
+	free(socket_path);
+	free(config_path);
 
 	return 0;
 }
