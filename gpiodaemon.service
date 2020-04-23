@@ -1,0 +1,12 @@
+[Unit]
+Description=GPIOdaemon
+After=network-online.target
+
+[Service]
+Type=simple
+Restart=on-failure
+StandardError=syslog
+ExecStart=/usr/local/bin/gpiodaemon
+
+[Install]
+WantedBy=multi-user.target
