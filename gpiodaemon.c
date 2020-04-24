@@ -48,6 +48,8 @@ void print_help(const char *name)
 	printf("  -d, --debug\t\tprint debug messages\n");
 	printf("  -c, --config\t\tconfiguraton file path [/usr/local/etc/gpiodaemon]\n");
 	printf("  -s, --socket\t\tsocket path [/var/run/gpiodaemon.sock]\n");
+
+	exit(EXIT_SUCCESS);
 }
 
 void exit_program(int s)
