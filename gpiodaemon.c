@@ -416,7 +416,6 @@ static int processing_client_req(char *message, struct gpiod_line_bulk *entries,
 
 			if (value != -1) {
 				rv = gpiod_line_set_value(entries->lines[i], value);
-
 				if (rv < 0)
 					strcpy(msg, "NOK\n");
 				else
@@ -476,7 +475,9 @@ static int processing_client_req(char *message, struct gpiod_line_bulk *entries,
 
 int main(int argc, char **argv)
 {
-	char *config_path = NULL, *socket_path = NULL;
+	char *config_path = NULL, *socket_path = NULL, cli_message[256] = {0},
+		 cli_msg_len = 0;
+	unsigned char cli_msg_len_prev = 0;
 	int client_sockets[MAX_FDS] = {0}, gpioevent_fds[MAX_LINES] = {0},
 		gpioevent_line_num[MAX_LINES] = {0},
 	 	master_socket, new_socket, sd, max_sd, srv, len,
@@ -648,17 +649,24 @@ int main(int argc, char **argv)
 			/* Incoming data from client */
 			for (size_t i = 0; i < MAX_FDS; i++) {
 				sd = client_sockets[i];
-				char buffer[128] = {0};
+				cli_msg_len = recv(sd, &cli_message[cli_msg_len_prev], sizeof(cli_message)-1, 0);
 
 				if (FD_ISSET(sd, &rdfs)) {
 					/* Somebody disconnected */
-					if (recv(sd, buffer, sizeof(buffer)-1, MSG_WAITALL) == 0) {
+					if (cli_msg_len == 0) {
 						close(sd);
 						client_sockets[i] = 0;
 					}
 					else {
-						printf("%s", buffer);
-						processing_client_req(buffer, &entries, sd);
+						if (cli_message[cli_msg_len+cli_msg_len_prev-1] == '\n') {
+							cli_msg_len_prev = 0;
+							printf("%s", cli_message);
+							processing_client_req(cli_message, &entries, sd);
+							bzero(cli_message, sizeof(cli_message));
+						}
+						else {
+							cli_msg_len_prev += cli_msg_len;
+						}
 					}
 					break;
 				}
