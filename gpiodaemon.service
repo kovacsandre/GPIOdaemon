@@ -5,6 +5,7 @@ After=network-online.target
 [Service]
 Type=simple
 Restart=on-failure
+KillSignal=SIGINT
 StandardError=syslog
 ExecStart=/usr/local/bin/gpiodaemon
 
