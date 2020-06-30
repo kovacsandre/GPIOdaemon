@@ -11,7 +11,11 @@ be a solution for this problem using the *libgpiod* library.
 First, the daemon reads the config file at startup and tries to config the GPIO
 lines. After it is done, the daemon will wait for the socket connections. For example the line below represents how to set the PD21 pin to high on the gpiochip1:
 
-    echo "gpiochip1:PD21 set=1" | socat - UNIX-CONNECT:/var/run/gpiodaemon.sock
+    echo "gpiochip1:PD21 set" | socat - UNIX-CONNECT:/var/run/gpiodaemon.sock
+
+and to low:
+
+    echo "gpiochip1:PD21 reset" | socat - UNIX-CONNECT:/var/run/gpiodaemon.sock
 
 Alternatively you can replace the PD21 with the line number (117). The server will
 respond with an *OK* or a *NOK* message what depends on the outcome of the command.
@@ -36,9 +40,8 @@ This daemon is still in an active development.
 
 ## TODOs (without priorities)
 
-* ~~~Input/output query. To be able to get the state of the pins~~~
+* Improve receive code quality.
 * Add "group" keyword to the config. This can be useful when some programs are
 using GPIOs. With an initial message the client may select from the group of
 interest eg. interrupts
-* ~~~Add getopts() for flexibility~~~
 * Update for the newer *libgpiod*
