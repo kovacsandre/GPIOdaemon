@@ -1,5 +1,10 @@
 /*
  * 2020 André Kovács <info@kovacsandre.com>
+ *
+ * This example requires at least one line in the gpiodaemon config with
+ * direction=in and edge=rising | falling | both keywords to work.
+ * This means the corresponding GPIO line has interrupt capabilities.
+ *
  */
 
 #include <stdio.h>
