@@ -271,7 +271,7 @@ static int parser(const char *config_file,
 	struct gpiod_line_request_config config = {0};
 
 	if ((fp = fopen(config_file, "r")) == NULL) {
-		perror("fopen()");
+		perror("Config file:");
 		return -1;
 	}
 
