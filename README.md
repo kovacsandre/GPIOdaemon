@@ -17,8 +17,13 @@ and to low:
 
     echo "gpiochip1:PD21 reset" | socat - UNIX-CONNECT:/var/run/gpiodaemon.sock
 
+or to get the pin state:
+
+    echo "gpiochip1:PD21 get" | socat - UNIX-CONNECT:/var/run/gpiodaemon.sock
+
 Alternatively you can replace the PD21 with the line number (117). The server will
 respond with an *OK* or a *NOK* message what depends on the outcome of the command.
+The *get* will respond with a *0* or *1*.
 
 With the following command you can receive the input interrupts:
 
@@ -45,3 +50,9 @@ This daemon is still in an active development.
 using GPIOs. With an initial message the client may select from the group of
 interest eg. interrupts
 * Update for the newer *libgpiod*
+
+## Hardware
+
+In theory the code is hardware independent but up to now I only tested on
+OPI Lite2 (Allwinner H6) and OPI Zero (Allwinner H2). If you tested with
+another hw or you found bugs feel free to contact me or make a request.
