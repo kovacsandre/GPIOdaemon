@@ -375,14 +375,14 @@ static int processing_client_req(char *message, struct gpiod_line_bulk *entries,
 
 	if (find_chip_name(&ptr, &start, message, chipname, sizeof(chipname)) < 0) {
 		char msg[] = "Wrong chip!\n";
-		send_sock_msg(sd, msg, sizeof(msg), 0);
+		send_sock_msg(sd, msg, strlen(msg), 0);
 
 		return -1;
 	}
 
 	if ((pinrv = find_pin(&ptr, &start, &line_num)) < 0) {
 		char msg[] = "Wrong pin!\n";
-		send_sock_msg(sd, msg, sizeof(msg), 0);
+		send_sock_msg(sd, msg, strlen(msg), 0);
 
 		return -1;
 	}
@@ -394,7 +394,7 @@ static int processing_client_req(char *message, struct gpiod_line_bulk *entries,
 	else if (!strcmp(ptr, "get\n")) {}
 	else {
 		char msg[] = "Wrong keyword!\n";
-		send_sock_msg(sd, msg, sizeof(msg), 0);
+		send_sock_msg(sd, msg, strlen(msg), 0);
 
 		return -1;
 	}
@@ -428,7 +428,7 @@ static int processing_client_req(char *message, struct gpiod_line_bulk *entries,
 				else
 					strcpy(msg, "1\n");
 			}
-			send_sock_msg(sd, msg, sizeof(msg), 0);
+			send_sock_msg(sd, msg, strlen(msg), 0);
 			break;
 		}
 	}
@@ -466,7 +466,7 @@ static int processing_client_req(char *message, struct gpiod_line_bulk *entries,
 				else
 					strcpy(msg, "1\n");
 			}
-			send_sock_msg(sd, msg, sizeof(msg), 0);
+			send_sock_msg(sd, msg, strlen(msg), 0);
 		}
 	}
 
@@ -640,7 +640,7 @@ int main(int argc, char **argv)
 					for (size_t i = 0; i < MAX_FDS; i++) {
 						sd = client_sockets[i];
 						if (sd)
-							send_sock_msg(sd, buffer, sizeof(buffer), 0);
+							send_sock_msg(sd, buffer, strlen(buffer), 0);
 					}
 
 					break;
