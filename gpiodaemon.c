@@ -653,13 +653,17 @@ int main(int argc, char **argv)
 				if (FD_ISSET(sd, &rdfs)) {
 					cli_msg_len = read(sd, &cli_message[cli_msg_len_prev], sizeof(cli_message)-1);
 					/* Somebody disconnected */
-					if (cli_msg_len == 0) {
+					if (cli_msg_len < 0) {
+						perror("read()");
+						bzero(cli_message, sizeof(cli_message));
+					}
+					else if (cli_msg_len == 0) {
 						printf("fd %d disconected\n", sd);
 						close(sd);
 						client_sockets[i] = 0;
 					}
 					else {
-						if (cli_message[cli_msg_len+cli_msg_len_prev-1] == '\n') {
+						if (cli_message[strlen(cli_message)-1] == '\n') {
 							cli_msg_len_prev = 0;
 							printf("incoming message: %s", cli_message);
 							processing_client_req(cli_message, &entries, sd);
